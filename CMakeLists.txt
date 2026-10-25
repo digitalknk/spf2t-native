@@ -17,5 +17,10 @@ target_link_libraries(puzzle-fighter-native PRIVATE puzzle_fighter_decomp SDL3::
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   target_compile_options(puzzle-fighter-native PRIVATE -Wall -Wextra -Werror)
 endif()
+if(CMAKE_CXX_COMPILER_ID STREQUAL "AppleClang")
+  # AppleClang flags the compact one-line if/else style as misleading
+  # indentation; GCC doesn't. Linux builds are unaffected.
+  target_compile_options(puzzle-fighter-native PRIVATE -Wno-misleading-indentation)
+endif()
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/sdl-runtime.txt" CONTENT "$<TARGET_FILE:SDL3::SDL3>\n")
 install(TARGETS puzzle-fighter-native RUNTIME DESTINATION .)
