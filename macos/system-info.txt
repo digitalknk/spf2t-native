@@ -1,0 +1,26 @@
+## System
+ProductName:		macOS
+ProductVersion:		27.0.1
+BuildVersion:		26A434
+arm64
+Apple clang version 21.0.0 (clang-2100.3.34.2)
+
+## Commits
+803f38d Build on macOS with AppleClang; add optional mise tasks
+ad120bd Split mixed-type auto declarations so Clang accepts them
+
+## Binary
+build/puzzle-fighter-native: Mach-O 64-bit executable arm64
+build/puzzle-fighter-native:
+	/opt/homebrew/opt/sdl3/lib/libSDL3.0.dylib (compatibility version 401.0.0, current version 401.18.0)
+	/usr/lib/libc++.1.dylib (compatibility version 1.0.0, current version 2200.27.0)
+	/usr/lib/libSystem.B.dylib (compatibility version 1.0.0, current version 1359.0.0)
+
+## Audio check
+Audio check: coreaudio, playing character-select music for 3 seconds
+Audio check: device stream accepted 137280 nonzero samples
+
+## Headless 600 frames (tail)
+  "unrecovered_source_tasks": [],
+  "source_runtime": {"irq_frames": 600, "main_cycles": 600, "sound_requests_dispatched": 9, "pending_sound_queue": 0, "scene_request": false}
+}
