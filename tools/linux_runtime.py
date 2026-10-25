@@ -17,7 +17,6 @@ AUDIO_LIBRARIES = {
 # Keep the host's libc/loader and graphics driver stack. Client libraries,
 # including SDL's dlopen dependencies, travel with the game.
 SYSTEM_LIBRARIES = re.compile(r"^(?:ld-linux.*|lib(?:c|m|mvec|dl|pthread|rt|resolv|util|anl)\.so(?:\..*)?)$")
-VIDEO_CLIENTS = ("libwayland-", "libxkbcommon.so", "libX", "libudev.so", "libusb-1.0.so", "libdbus-1.so")
 
 
 def command(*args):
@@ -35,6 +34,7 @@ def dynamic_names(path):
     # Read whole string constants, avoiding partial matches and diagnostic text.
     return set(value.decode("ascii") for value in re.findall(
         rb"(?:^|\x00)(lib[A-Za-z0-9_+.-]+\.so(?:\.[A-Za-z0-9_.-]+)*)(?=\x00)", path.read_bytes()))
+
 
 
 class RuntimeBundle:
@@ -72,18 +72,11 @@ class RuntimeBundle:
                 raise ValueError("Cannot identify the SDL client library for audio driver: " + driver)
             for name in set(candidates):
                 self.libraries[name] = self.resolve(name, sdl)
-        for name in sorted(names):
-            if name.startswith(VIDEO_CLIENTS):
-                try:
-                    self.libraries[name] = self.resolve(name, sdl)
-                except ValueError:
-                    # SDL also contains optional compatibility SONAMEs (udev0,
-                    # X11-xcb, etc.). Do not require a second ABI when absent.
-                    pass
         self._resources()
         owners = list(self.libraries.values())
         for source, _ in self.resources:
-            owners.extend(path for path in source.rglob("*.so*") if path.is_file())
+            owners.extend([source] if source.is_file() else
+                          (path for path in source.rglob("*.so*") if path.is_file()))
         processed = set()
         while owners:
             owner = owners.pop().resolve()
@@ -115,7 +108,7 @@ class RuntimeBundle:
 
     def _resources(self):
         def add(source, destination, required=False):
-            if source.is_dir():
+            if source.exists():
                 self.resources.append((source, Path(destination)))
             elif required:
                 raise ValueError("Missing audio runtime data directory: " + str(source))
@@ -130,9 +123,20 @@ class RuntimeBundle:
                 add(data(path, "alsa"), "share/alsa", required=True)
                 add(path.parent / "alsa-lib", "lib/alsa-lib")
             if name.startswith("libpipewire-0.3.so"):
-                add(path.parent / "pipewire-0.3", "lib/pipewire-0.3", required=True)
-                add(path.parent / "spa-0.2", "lib/spa-0.2", required=True)
-                add(data(path, "pipewire"), "share/pipewire", required=True)
+                configuration = data(path, "pipewire")
+                add(configuration, "share/pipewire", required=True)
+                # Package the client modules actually named by the audio client
+                # configs, rather than server/video modules and their libraries.
+                configs = [configuration / "client.conf", configuration / "client-rt.conf"]
+                text = "\n".join(line.split("#", 1)[0]
+                                 for config in configs if config.is_file()
+                                 for line in config.read_text().splitlines())
+                for module in sorted(set(re.findall(r"\bname\s*=\s*(libpipewire-module-[\w-]+)", text))):
+                    relative = Path("pipewire-0.3") / (module + ".so")
+                    add(path.parent / relative, Path("lib") / relative, required=True)
+                for plugin in sorted(set(re.findall(r"=\s*([\w./-]+/libspa-[\w-]+)", text))):
+                    relative = Path("spa-0.2") / (plugin + ".so")
+                    add(path.parent / relative, Path("lib") / relative, required=True)
         # Multiarch distributions place data above lib/<triplet>/ instead.
         # resolve resources independently from library search/host configuration.
 
@@ -142,7 +146,11 @@ class RuntimeBundle:
         for name, source in self.libraries.items():
             shutil.copy2(source, lib / name)
         for source, relative in self.resources:
-            shutil.copytree(source, package / relative, dirs_exist_ok=True)
+            if source.is_dir():
+                shutil.copytree(source, package / relative, dirs_exist_ok=True)
+            else:
+                (package / relative).parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(source, package / relative)
         for path in lib.rglob("*"):
             path.chmod(path.stat().st_mode | stat.S_IWUSR)
             if not path.is_file():
@@ -167,7 +175,8 @@ class RuntimeBundle:
         inventory = {str(path.relative_to(package)): hashlib.sha256(path.read_bytes()).hexdigest()
                      for path in sorted(lib.rglob("*")) if path.is_file()}
         (package / "runtime.json").write_text(json.dumps(
-            {"audio_drivers": self.audio_drivers, "libraries": inventory}, indent=2) + "\n")
+            {"audio_drivers": self.audio_drivers, "libraries": inventory,
+             "resource_roots": sorted(str(relative) for _, relative in self.resources)}, indent=2) + "\n")
 
     def copy_notices(self, destination):
         """Retain installed package notices when the build system provides them."""
