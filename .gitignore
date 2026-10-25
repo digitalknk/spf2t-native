@@ -1,0 +1,25 @@
+/build/
+/data/
+/user/
+/generated/
+__pycache__/
+*.pyc
+*.bin
+*.key
+*.zip
+*.7z
+*.png
+*.bmp
+*.wav
+*.inc
+
+/build-container/
+.env
+.env.*
+*.pem
+*.p12
+
+# User inputs and wrapper-controlled outputs, regardless of extension.
+/roms/*
+!/roms/.gitkeep
+/output/
