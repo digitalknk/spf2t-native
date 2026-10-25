@@ -11,6 +11,8 @@ import subprocess
 import sys
 import tempfile
 
+from linux_runtime import RuntimeBundle
+
 ROOT = Path(__file__).resolve().parents[1]
 MISSING = "Run spf2t-decomp first with the same output directory, or use the native AIO image."
 
@@ -46,7 +48,7 @@ def preflight(args):
         verify_input(args.decomp.resolve())
     except (ValueError, KeyError, OSError) as error:
         errors.append(str(error))
-    for name in (args.cmake, args.cxx, "make"):
+    for name in (args.cmake, args.cxx, "make", "patchelf", "ldd"):
         if shutil.which(name) is None:
             errors.append("Required build tool not found: " + name)
     for directory in (args.output, args.build_dir):
@@ -77,7 +79,7 @@ def preflight(args):
     # or writing to the user's selected build/output directories.
     with tempfile.TemporaryDirectory(prefix="spf2t-preflight-") as temporary:
         probe = Path(temporary)
-        (probe / "CMakeLists.txt").write_text('cmake_minimum_required(VERSION 3.20)\nproject(preflight LANGUAGES CXX)\nfile(WRITE "${CMAKE_BINARY_DIR}/check.cpp" "#include <filesystem>\\nint main() { std::filesystem::path p; }\\n")\nadd_executable(check "${CMAKE_BINARY_DIR}/check.cpp")\ntarget_compile_features(check PRIVATE cxx_std_17)\nfind_package(SDL3 3.4.16 REQUIRED CONFIG)\nfile(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/sdl-runtime.txt" CONTENT "$<TARGET_FILE:SDL3::SDL3>")\n')
+        (probe / "CMakeLists.txt").write_text('cmake_minimum_required(VERSION 3.20)\nproject(preflight LANGUAGES CXX)\nfile(WRITE "${CMAKE_BINARY_DIR}/check.cpp" "#include <filesystem>\\n#include <SDL3/SDL.h>\\n#include <iostream>\\nint main() { for(int i=0;i<SDL_GetNumAudioDrivers();++i) std::cout << SDL_GetAudioDriver(i) << std::endl; }\\n")\nadd_executable(check "${CMAKE_BINARY_DIR}/check.cpp")\ntarget_compile_features(check PRIVATE cxx_std_17)\nfind_package(SDL3 3.4.16 REQUIRED CONFIG)\ntarget_link_libraries(check PRIVATE SDL3::SDL3)\nfile(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/sdl-runtime.txt" CONTENT "$<TARGET_FILE:SDL3::SDL3>")\n')
         result = subprocess.run([args.cmake, "-S", str(probe), "-B", str(probe / "build"), "-DCMAKE_CXX_COMPILER=" + args.cxx], text=True, capture_output=True)
         if result.returncode:
             raise ValueError("Build environment preflight failed (C++17/CMake/SDL3):\n" + result.stdout + result.stderr)
@@ -88,7 +90,10 @@ def preflight(args):
         if not sdl.is_file() or ".so" not in sdl.name:
             raise ValueError("A shared Linux SDL3 library is required for native packaging")
         runtimes["libSDL3.so.0"] = sdl
-    return runtimes
+        drivers = subprocess.check_output([str(probe / "build/check")], text=True).splitlines()
+        if not set(drivers) - {"dummy", "disk"}:
+            raise ValueError("SDL was built without an audio-device backend")
+    return RuntimeBundle(runtimes, drivers, args.cxx)
 
 
 def build(args):
@@ -104,10 +109,7 @@ def build(args):
         package = stage / "game"
         subprocess.run([args.cmake, "--install", str(build_dir), "--prefix", str(package)], check=True)
         shutil.copytree(decomp / "data", package / "data")
-        lib = package / "lib"
-        lib.mkdir()
-        for name, path in runtimes.items():
-            shutil.copy2(path, lib / name)
+        runtimes.install(package)
         notices = package / "licenses"
         notices.mkdir()
         for name in ("LICENSE", "LICENSE_SCOPE.md", "THIRD_PARTY_NOTICES.md", "UPSTREAM.md"):
@@ -115,6 +117,7 @@ def build(args):
         for name in ("BSD-3-Clause.txt", "SDL3-LICENSE.txt", "GCC-runtime-copyright.txt"):
             shutil.copy2(ROOT / "third_party" / name, notices / name)
         shutil.copytree(decomp / "licenses", notices / "decomp")
+        runtimes.copy_notices(notices / "runtime")
         if output.exists():
             backup = Path(tempfile.mkdtemp(prefix=output.name + ".previous-", dir=output.parent))
             backup.rmdir()

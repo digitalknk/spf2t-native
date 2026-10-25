@@ -13,3 +13,8 @@ package into third_party/GCC-runtime-copyright.txt and copied into output/licens
 full GPLv3 text is LICENSE. SDL3-LICENSE.txt preserves the SDL license.
 Original game content remains owned by its respective rights holders and is
 not licensed by this project's GPL grant.
+
+Exported runtime packages also collect the selected SDL audio-client libraries
+and their transitive dependencies. Installed package copyright/license notices
+are copied where available into licenses/runtime/, with an index by library.
+These generated libraries remain outside the public source repository.

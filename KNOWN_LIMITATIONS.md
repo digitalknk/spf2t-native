@@ -14,8 +14,9 @@
 - Reported sprite-facing, Akuma voice selection and F9 figure-centering issues
   remain queued. A game-only third layout and dither smoothing are future work.
 - Container-built executables run on the host and require a compatible Linux
-  loader/runtime; SDL3 and C++ runtime are bundled, glibc and system backends
-  are not. See CONTAINERS.md for the Debian 12 baseline and NixOS caveat.
+  loader/runtime. SDL3, its audio-backend client dependencies/data and C++ runtime
+  are bundled. The OS loader/glibc, graphics drivers and working audio service
+  or sound device are host requirements. See CONTAINERS.md for the Linux baseline.
 - Linux is the initial tested platform. Multiplayer is local; no network play.
 - Source release only. Supply original data locally; generated game data and
   tutorial code must not be committed or included in source archives.

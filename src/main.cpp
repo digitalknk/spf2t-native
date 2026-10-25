@@ -24,16 +24,28 @@ struct Options {
     std::vector<std::pair<unsigned,SDL_Scancode>> menu_keys;
     unsigned restart_at=0,start_at=0;GameSettings config;bool setup=true;
     unsigned frames=0;std::uint16_t seed=0x920d;
-    bool demo=false,solo=false,headless=false,exercise=false,mute=false,music=true,save_options=true,original_layout=true,arcade=false;
+    bool audio_check=false,demo=false,solo=false,headless=false,exercise=false,mute=false,music=true,save_options=true,original_layout=true,arcade=false;
 };
 static Options options(int argc,char**argv) {
     Options o;
     const char* base=SDL_GetBasePath();
     if(!base)throw std::runtime_error("Cannot locate game directory: "+std::string(SDL_GetError()));
+#ifdef __linux__
+    const auto directory=std::filesystem::path(base);
+    for(const auto& item:{std::pair{"ALSA_CONFIG_DIR","share/alsa"},
+                          std::pair{"ALSA_PLUGIN_DIR","lib/alsa-lib"},
+                          std::pair{"PIPEWIRE_CONFIG_DIR","share/pipewire"},
+                          std::pair{"PIPEWIRE_MODULE_DIR","lib/pipewire-0.3"},
+                          std::pair{"SPA_PLUGIN_DIR","lib/spa-0.2"}}) {
+        const auto path=directory/item.second;
+        if(std::filesystem::is_directory(path)&&!SDL_getenv(item.first))
+            SDL_setenv_unsafe(item.first,path.string().c_str(),0);
+    }
+#endif
     o.root=(std::filesystem::path(base)/"data").string();
     o.user_dir=(std::filesystem::path(base)/"user").string();
     o.config.legacy=false;bool explicit_config=false,legacy=false;
-    bool batch=false;for(int i=1;i<argc;++i){if((std::string(argv[i])=="--root"||std::string(argv[i])=="--data-dir")&&i+1<argc)o.root=argv[i+1];if(std::string(argv[i])=="--user-dir"&&i+1<argc)o.user_dir=argv[i+1];if(std::string(argv[i])=="--headless"||std::string(argv[i])=="--demo")batch=true;}
+    bool batch=false;for(int i=1;i<argc;++i){if((std::string(argv[i])=="--root"||std::string(argv[i])=="--data-dir")&&i+1<argc)o.root=argv[i+1];if(std::string(argv[i])=="--user-dir"&&i+1<argc)o.user_dir=argv[i+1];if(std::string(argv[i])=="--headless"||std::string(argv[i])=="--demo"||std::string(argv[i])=="--check-audio")batch=true;}
     if(!batch)o.config.load(o.user_dir);else o.config.random_seed=false;
     const auto number=[](const std::string&v,unsigned limit){std::size_t used=0;const auto n=std::stoul(v,&used,0);if(used!=v.size()||n>limit)throw std::runtime_error("Invalid option value: "+v);return unsigned(n);};
     const auto character=[&](std::string name){if(!name.empty()&&std::isdigit(static_cast<unsigned char>(name[0])))return number(name,10);std::string clean;for(char c:name)if(std::isalnum(static_cast<unsigned char>(c)))clean+=char(std::tolower(static_cast<unsigned char>(c)));for(unsigned c=0;c<11;++c){std::string canonical;for(char ch:std::string(character_name(c)))if(std::isalnum(static_cast<unsigned char>(ch)))canonical+=char(std::tolower(static_cast<unsigned char>(ch)));if(clean==canonical)return c;}throw std::runtime_error("Unknown original character: "+name);};
@@ -68,9 +80,9 @@ static Options options(int argc,char**argv) {
             while(f>>frame){std::getline(f>>std::ws,key);const auto code=SDL_GetScancodeFromName(key.c_str());if(!frame||code==SDL_SCANCODE_UNKNOWN)throw std::runtime_error("Invalid scheduled key");o.menu_keys.emplace_back(frame,code);}
             std::stable_sort(o.menu_keys.begin(),o.menu_keys.end(),[](auto a,auto b){return a.first<b.first;});
         }
-        else if(a=="--headless")o.headless=true;else if(a=="--exercise")o.exercise=true;
+        else if(a=="--check-audio")o.audio_check=true;else if(a=="--headless")o.headless=true;else if(a=="--exercise")o.exercise=true;
         else if(a=="--help") {
-            std::cout<<"Puzzle Fighter native prototype\nP1 gameplay: A/D move, S drop, C/V turn, Enter taunt\nP2 gameplay: arrows move/drop, J/K turn, keypad Enter taunt; both keyboard layouts control P1 in solo\nSetup: P1 WASD, C confirm, V cancel; P2 arrows, J confirm, K cancel; solo arrows also control P1, Tab edits CPU fighter\nBoth ready starts; Enter starts at any time. F8 original arcade, F9 original/native display, F10 enhanced options, R quick rematch (quick mode only), Space pause, Escape quit\n--solo uses a testing macro, not original AI; --classic uses original-derived CPU\nArcade: independent P1/P2 inputs; Enter / keypad Enter or gamepad Start joins/continues; 5 inserts a coin (6 uses chute2 when configured); original boot, title, attract, endings and scores are connected.\nOptions: --arcade --original-layout --native-layout --seed N --random-seed --solo --classic --versus --p1 NAME --p2 NAME --difficulty 0..7 --course easy/normal/hard --speed 0..3 --damage low/normal/high/maximum --handicap1 0..4 --handicap2 0..4 --rounds 1/3/5 --quick-start --new-game --legacy-setup --demo --exercise --frames N --headless --capture FILE.bmp --capture-break FILE.bmp --capture-attack FILE.bmp --report FILE.json --audio-wav FILE.wav --mute --no-music --data-dir PACK --user-dir STATE (--root aliases --data-dir)\nGamepads: D-pad/left stick; bottom/right face buttons turn and confirm/cancel; Start starts/pauses; Back options\nChecks: --key-script FILE (lines: frame scancode-name) --no-save-options --start-at N --restart-at N\n";std::exit(0);
+            std::cout<<"Puzzle Fighter native prototype\nP1 gameplay: A/D move, S drop, C/V turn, Enter taunt\nP2 gameplay: arrows move/drop, J/K turn, keypad Enter taunt; both keyboard layouts control P1 in solo\nSetup: P1 WASD, C confirm, V cancel; P2 arrows, J confirm, K cancel; solo arrows also control P1, Tab edits CPU fighter\nBoth ready starts; Enter starts at any time. F8 original arcade, F9 original/native display, F10 enhanced options, R quick rematch (quick mode only), Space pause, Escape quit\n--solo uses a testing macro, not original AI; --classic uses original-derived CPU\nArcade: independent P1/P2 inputs; Enter / keypad Enter or gamepad Start joins/continues; 5 inserts a coin (6 uses chute2 when configured); original boot, title, attract, endings and scores are connected.\nOptions: --arcade --original-layout --native-layout --seed N --random-seed --solo --classic --versus --p1 NAME --p2 NAME --difficulty 0..7 --course easy/normal/hard --speed 0..3 --damage low/normal/high/maximum --handicap1 0..4 --handicap2 0..4 --rounds 1/3/5 --quick-start --new-game --legacy-setup --demo --exercise --frames N --headless --capture FILE.bmp --capture-break FILE.bmp --capture-attack FILE.bmp --report FILE.json --audio-wav FILE.wav --mute --no-music --data-dir PACK --user-dir STATE (--root aliases --data-dir)\nGamepads: D-pad/left stick; bottom/right face buttons turn and confirm/cancel; Start starts/pauses; Back options\nChecks: --check-audio (plays 3 seconds through a real audio backend) --key-script FILE (lines: frame scancode-name) --no-save-options --start-at N --restart-at N\n";std::exit(0);
         }else throw std::runtime_error("Unknown option: "+a);
     }
     if(o.headless&&!o.frames)throw std::runtime_error("Headless mode needs --frames N");
@@ -332,7 +344,25 @@ struct View {
 };
 #include "menu.hpp"
 int main(int argc,char**argv)try {
-    auto o=options(argc,argv);std::filesystem::create_directories(o.user_dir);Game game(o.root,o.seed,o.config);if(o.exercise)exercise(game);
+    auto o=options(argc,argv);
+    if(o.audio_check) {
+        {
+            NativeAudio audio(o.root,false,true);
+            audio.open_device();
+            const std::string backend=SDL_GetCurrentAudioDriver()?SDL_GetCurrentAudioDriver():"unknown";
+            if(backend=="dummy"||backend=="disk")throw std::runtime_error("Audio check requires an audio-device backend");
+            std::cerr<<"Audio check: "<<backend<<", playing character-select music for 3 seconds\n";
+            audio.music_cue(0x0e);
+            for(unsigned frame=0;frame<180;++frame){audio.frame();SDL_Delay(frame%3==0?16:17);}
+            audio.flush();
+            SDL_Delay(100);
+            if(!audio.nonzero_samples)throw std::runtime_error("Audio check generated no sound samples");
+            std::cerr<<"Audio check: device stream accepted "<<audio.nonzero_samples<<" nonzero samples\n";
+        }
+        SDL_Quit();
+        return 0;
+    }
+    std::filesystem::create_directories(o.user_dir);Game game(o.root,o.seed,o.config);if(o.exercise)exercise(game);
     SoloMacro macro;BreakVisuals visuals;CharacterVisuals actors;Match match(game.settings.legacy);SetupMenu menu;AttackHud attacks;DangerMusic danger_music;MatchFeedback feedback;
     NativeMatchRuntime source_runtime(game,match);
     source_runtime.cabinet.operator_store.path=o.user_dir+"/arcade-operator-counters.bin";

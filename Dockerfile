@@ -1,7 +1,7 @@
 FROM docker.io/library/python:3.13-slim-bookworm@sha256:e32be0e55814a08977501ca863271d9bd02443710db8f2afaf8372e2c4508530 AS toolchain
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    g++ cmake make pkg-config curl ca-certificates \
-    libasound2-dev libpulse-dev libx11-dev libxext-dev libxrandr-dev \
+    g++ cmake make pkg-config curl ca-certificates patchelf \
+    libasound2-dev libpulse-dev libpipewire-0.3-dev libx11-dev libxext-dev libxrandr-dev \
     libxcursor-dev libxfixes-dev libxi-dev libxss-dev libxtst-dev \
     libwayland-dev libwayland-bin wayland-protocols libxkbcommon-dev \
     libdrm-dev libgbm-dev libegl1-mesa-dev libgl1-mesa-dev libudev-dev \
@@ -17,6 +17,10 @@ RUN curl -fL https://www.libsdl.org/release/SDL3-3.4.16.tar.gz -o /tmp/SDL.tar.g
     && mkdir -p /usr/local/share/licenses/SDL3 \
     && cp /tmp/sdl/LICENSE.txt /usr/local/share/licenses/SDL3/LICENSE.txt \
     && ldconfig && rm -rf /tmp/sdl /tmp/sdl-build /tmp/SDL.tar.gz
+# PipeWire client configuration loads these modules at runtime.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpipewire-0.3-modules libspa-0.2-modules pipewire-bin \
+    && rm -rf /var/lib/apt/lists/*
 ENV PYTHONDONTWRITEBYTECODE=1
 
 FROM toolchain AS native-only

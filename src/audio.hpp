@@ -58,8 +58,9 @@ public:
         SDL_AudioSpec spec{SDL_AUDIO_S16,2,int(rate)};
         stream=SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK,&spec,nullptr,nullptr);
         if(!stream)throw std::runtime_error(SDL_GetError());
-        SDL_ResumeAudioStreamDevice(stream);
+        if(!SDL_ResumeAudioStreamDevice(stream))throw std::runtime_error(SDL_GetError());
     }
+    void flush(){if(stream&&!SDL_FlushAudioStream(stream))throw std::runtime_error(SDL_GetError());}
     void reset(std::uint16_t song=1) {
         if(stream)SDL_ClearAudioStream(stream);
         commands.clear();writes.clear();shared.fill(0);sample_count=clock=next_write=last_write=0;interrupt_phase=frame_phase=0;

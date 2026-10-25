@@ -75,7 +75,9 @@ output/
   spf2t-native/
     puzzle-fighter-native  run this executable directly
     data/
-    lib/
+    lib/                   SDL and backend/client dependencies
+    share/                 backend configuration/data
+    runtime.json           packaged backend/library inventory
     licenses/
     user/                  created when played
 ```
@@ -86,10 +88,12 @@ output/
 
 The executable locates adjacent data and default player state independently of
 its working directory. Keep the whole `spf2t-native/` directory together when
-moving it; no source checkout is needed to play. It bundles SDL3 and the GCC
-C++ runtime, with notices. Linux system loader/glibc and display/audio backends
-are still needed; Debian12/glibc2.36 is the container baseline. NixOS needs its
-normal ELF packaging or a native host build. Windows/macOS are not runtime
+moving it; no source checkout is needed to play. It bundles SDL3, its compiled audio-backend client libraries/configuration and
+the GCC C++ runtime, with notices. SDL chooses the available audio device/backend
+automatically. `--check-audio` plays a short music sample through that backend.
+The Linux system loader/glibc, graphics drivers and a working OS audio service
+or accessible sound device are still needed; Debian12/glibc2.36 is the container baseline. NixOS needs its
+normal ELF loader support or a native host build. Windows/macOS are not runtime
 targets. Local output contains original game content and is not a public
 source-release artifact.
 

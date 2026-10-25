@@ -26,9 +26,11 @@ command. See [CONTAINERS.md](CONTAINERS.md) for native-only images and local-sou
 
 ## Build with installed tools
 
-Requirements: Python 3.9+, CMake 3.20+, Make, a C++17 compiler with GNU-compatible
-C++ runtime libraries, and shared SDL3 3.4.16+ development files. SDL must be
-discoverable by CMake; set `CMAKE_PREFIX_PATH` for a custom installation.
+Requirements: Python 3.9+, CMake 3.20+, Make, patchelf, ldd, a C++17 compiler
+with GNU-compatible C++ runtime libraries, and shared SDL3 3.4.16+ development files. SDL must be
+discoverable by CMake; set `CMAKE_PREFIX_PATH` for a custom installation. Install
+the runtime libraries and data for the audio backends enabled in that SDL build.
+Preflight reports missing backend files before compiling the game.
 
 First run the [decomp process](https://github.com/gemmy-turbo/spf2t-decomp) to
 produce a complete handoff, then run:
@@ -61,13 +63,25 @@ so you can copy it and adjust the paths or options.
 ```
 
 Run the executable on your host. Move the complete `spf2t-native/` directory
-together: executable, `data/`, `lib/`, and `licenses/`. Data and default writable `user/` paths are
+together: executable, `data/`, `lib/`, `share/`, `runtime.json`, and `licenses/`.
+Data and default writable `user/` paths are
 resolved relative to the executable, independent of the working directory.
-SDL3 and C++ runtime libraries are bundled; a compatible Linux loader/glibc
-and system display/audio backends are still required. NixOS needs platform ELF
-packaging or a build using its native toolchain. The output directory
+SDL3, its enabled audio-backend dependencies/data, and C++ runtime libraries
+are bundled; a compatible Linux loader/glibc
+and OS graphics drivers plus a working audio service or accessible sound device
+are still required. NixOS needs ELF loader support or a native toolchain build. The output directory
 contains the executable and its supporting files. See CONTAINERS.md for the
 Linux runtime baseline.
+
+To check audio independently of the game window, run:
+
+```sh
+./output/spf2t-native/puzzle-fighter-native --check-audio
+```
+
+It opens an audio-device backend and plays about three seconds of character-select
+music, printing the selected backend. Confirm that you hear it. `runtime.json`
+lists the backends included by your build and the packaged libraries.
 
 A rebuild preserves the prior output beside the new one and carries player
 state forward. Imported data is immutable; `--data-dir` and `--user-dir` remain
