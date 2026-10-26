@@ -45,8 +45,8 @@ See the [decomp project](https://github.com/gemmy-turbo/spf2t-decomp) for the
 output format documentation.
 
 On macOS the same command works with Xcode's command line tools instead of
-patchelf/ldd/GNU runtimes: `xcode-select --install`, then `brew install cmake sdl3`.
-Only SDL3 is bundled; libc++ and
+patchelf/ldd/GNU runtimes: `xcode-select --install`, then `brew install cmake sdl3`
+(or let `mise run sdl` build the pinned SDL3). Only SDL3 is bundled; libc++ and
 CoreAudio come from macOS. The package is ad-hoc signed, which is enough to run
 it on the Mac that built it.
 

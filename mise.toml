@@ -1,0 +1,58 @@
+# Optional pinned toolchain and tasks (https://mise.jdx.dev). Without mise,
+# the routes in README.md and CONTAINERS.md (python3 build.py, Docker/Podman)
+# are unchanged. With mise installed, run `mise trust` once in this checkout.
+#
+# `mise run sdl` builds the same SDL3 release the Dockerfile uses into
+# build/sdl3, so builds don't depend on the distro's SDL3 version. On Linux,
+# SDL still needs the system dev packages for its audio/video backends (see
+# the Dockerfile's apt list); on macOS it only needs Xcode's command line tools.
+#
+# Assumed layout: an spf2t-decomp checkout sits beside this one
+# (../spf2t-decomp) and your USA960620 ROM ZIPs are placed in roms/ here.
+
+[tools]
+python = "3.13.17"
+cmake = "4.4.4"
+
+[env]
+SDL_VERSION = "3.4.16"
+SDL_SHA256 = "7322236cd12090c3eb40b9728be4d49c76f66ad17d04369584d4ecad5cf77c68"
+SDL_PREFIX = "{{config_root}}/build/sdl3"
+CMAKE_PREFIX_PATH = "{{config_root}}/build/sdl3"
+
+[tasks.sdl]
+description = "Download, verify and build the pinned SDL3 into build/sdl3"
+run = '''
+set -e
+[ -f "$SDL_PREFIX/lib/cmake/SDL3/SDL3Config.cmake" ] && grep -q "$SDL_VERSION" "$SDL_PREFIX/lib/cmake/SDL3/SDL3ConfigVersion.cmake" && exit 0
+work="{{config_root}}/build/sdl3-src"
+rm -rf "$work" && mkdir -p "$work"
+curl -fL "https://www.libsdl.org/release/SDL3-$SDL_VERSION.tar.gz" -o "$work/SDL.tar.gz"
+python3 -c 'import hashlib,sys;d=hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest();sys.exit(0 if d==sys.argv[2] else "SDL checksum mismatch: "+d)' "$work/SDL.tar.gz" "$SDL_SHA256"
+tar -xzf "$work/SDL.tar.gz" --strip-components=1 -C "$work"
+cmake -S "$work" -B "$work/build" -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$SDL_PREFIX" -DCMAKE_INSTALL_LIBDIR=lib \
+  -DSDL_SHARED=ON -DSDL_STATIC=OFF -DSDL_TEST_LIBRARY=OFF -DSDL_TESTS=OFF -DSDL_EXAMPLES=OFF -DSDL_WAYLAND_LIBDECOR=OFF
+cmake --build "$work/build" --parallel
+cmake --install "$work/build"
+rm -rf "$work"
+'''
+
+[tasks.decomp]
+description = "Run the decomp process against roms/, writing output/decomp (executes in the sibling spf2t-decomp checkout)"
+dir = "{{config_root}}/../spf2t-decomp"
+run = "python3 tools/decompile.py --rom-dir \"{{config_root}}/roms\" --output \"{{config_root}}/output\""
+
+[tasks.build]
+description = "Compile the game against the pinned SDL3 (unpackaged; for a portable game folder use `mise run package`)"
+depends = ["sdl"]
+run = "cmake -S \"{{config_root}}\" -B \"{{config_root}}/build/game\" -DCMAKE_BUILD_TYPE=Release -DPF_DECOMP_OUTPUT=\"{{config_root}}/output/decomp\" && cmake --build \"{{config_root}}/build/game\" --parallel"
+
+[tasks.package]
+description = "Run tools/build.py against the pinned SDL3, producing a portable game folder in output/spf2t-native"
+depends = ["sdl"]
+run = "python3 \"{{config_root}}/tools/build.py\" --decomp \"{{config_root}}/output/decomp\" --build-dir \"{{config_root}}/build/package\" --output \"{{config_root}}/output/spf2t-native\""
+
+[tasks.play]
+description = "Build if needed, then run the game against the decomp data"
+depends = ["build"]
+run = "\"{{config_root}}/build/game/puzzle-fighter-native\" --data-dir \"{{config_root}}/output/decomp/data\" --user-dir \"{{config_root}}/output/user\""
