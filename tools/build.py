@@ -11,7 +11,11 @@ import subprocess
 import sys
 import tempfile
 
-from linux_runtime import RuntimeBundle
+MACOS = sys.platform == "darwin"
+if MACOS:
+    from macos_runtime import RuntimeBundle
+else:
+    from linux_runtime import RuntimeBundle
 
 ROOT = Path(__file__).resolve().parents[1]
 MISSING = "Run spf2t-decomp first with the same output directory, or use the native AIO image."
@@ -48,7 +52,8 @@ def preflight(args):
         verify_input(args.decomp.resolve())
     except (ValueError, KeyError, OSError) as error:
         errors.append(str(error))
-    for name in (args.cmake, args.cxx, "make", "patchelf", "ldd"):
+    tools = ("install_name_tool", "otool", "codesign") if MACOS else ("patchelf", "ldd")
+    for name in (args.cmake, args.cxx, "make", *tools):
         if shutil.which(name) is None:
             errors.append("Required build tool not found: " + name)
     for directory in (args.output, args.build_dir):
@@ -62,7 +67,7 @@ def preflight(args):
     if ROOT.is_relative_to(output) or output.is_relative_to(decomp) or decomp.is_relative_to(output):
         errors.append("Native output must be separate from project source and decomp input")
     runtimes = {}
-    if shutil.which(args.cxx):
+    if shutil.which(args.cxx) and not MACOS:
         for name in ("libstdc++.so.6", "libgcc_s.so.1"):
             result = subprocess.run([args.cxx, "-print-file-name=" + name], capture_output=True, text=True)
             path = Path(result.stdout.strip())
@@ -70,7 +75,7 @@ def preflight(args):
                 errors.append("Compiler runtime library not found: " + name)
             else:
                 runtimes[name] = path
-    for relative in ("LICENSE", "LICENSE_SCOPE.md", "THIRD_PARTY_NOTICES.md", "UPSTREAM.md", "third_party/BSD-3-Clause.txt", "third_party/SDL3-LICENSE.txt", "third_party/GCC-runtime-copyright.txt"):
+    for relative in ("LICENSE", "LICENSE_SCOPE.md", "THIRD_PARTY_NOTICES.md", "UPSTREAM.md", "third_party/BSD-3-Clause.txt", "third_party/SDL3-LICENSE.txt", *(() if MACOS else ("third_party/GCC-runtime-copyright.txt",))):
         if not (ROOT / relative).is_file():
             errors.append("Required notice is missing: " + relative)
     if errors:
@@ -87,13 +92,18 @@ def preflight(args):
         if check.returncode:
             raise ValueError("Compiler/linker preflight failed:\n" + check.stdout + check.stderr)
         sdl = Path((probe / "build/sdl-runtime.txt").read_text().strip())
-        if not sdl.is_file() or ".so" not in sdl.name:
-            raise ValueError("A shared Linux SDL3 library is required for native packaging")
-        runtimes["libSDL3.so.0"] = sdl
+        if MACOS:
+            if not sdl.is_file() or sdl.suffix != ".dylib":
+                raise ValueError("A shared SDL3 dylib is required for native packaging")
+            runtimes["libSDL3.0.dylib"] = sdl
+        else:
+            if not sdl.is_file() or ".so" not in sdl.name:
+                raise ValueError("A shared Linux SDL3 library is required for native packaging")
+            runtimes["libSDL3.so.0"] = sdl
         drivers = subprocess.check_output([str(probe / "build/check")], text=True).splitlines()
         if not set(drivers) - {"dummy", "disk"}:
             raise ValueError("SDL was built without an audio-device backend")
-    return RuntimeBundle(runtimes, drivers, args.cxx)
+    return RuntimeBundle(runtimes, drivers) if MACOS else RuntimeBundle(runtimes, drivers, args.cxx)
 
 
 def build(args):
@@ -101,7 +111,7 @@ def build(args):
     decomp = args.decomp.resolve()
     build_dir = args.build_dir.resolve()
     output = args.output.resolve()
-    subprocess.run([args.cmake, "-S", str(ROOT), "-B", str(build_dir), "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_CXX_COMPILER=" + args.cxx, "-DPF_DECOMP_OUTPUT=" + str(decomp), "-DCMAKE_INSTALL_RPATH=$ORIGIN/lib"], check=True)
+    subprocess.run([args.cmake, "-S", str(ROOT), "-B", str(build_dir), "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_CXX_COMPILER=" + args.cxx, "-DPF_DECOMP_OUTPUT=" + str(decomp), "-DCMAKE_INSTALL_RPATH=" + ("@executable_path/lib" if MACOS else "$ORIGIN/lib")], check=True)
     subprocess.run([args.cmake, "--build", str(build_dir), "--parallel", "2"], check=True)
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix=".native-package-", dir=output.parent) as temporary:
@@ -114,7 +124,7 @@ def build(args):
         notices.mkdir()
         for name in ("LICENSE", "LICENSE_SCOPE.md", "THIRD_PARTY_NOTICES.md", "UPSTREAM.md"):
             shutil.copy2(ROOT / name, notices / name)
-        for name in ("BSD-3-Clause.txt", "SDL3-LICENSE.txt", "GCC-runtime-copyright.txt"):
+        for name in ("BSD-3-Clause.txt", "SDL3-LICENSE.txt", *(() if MACOS else ("GCC-runtime-copyright.txt",))):
             shutil.copy2(ROOT / "third_party" / name, notices / name)
         shutil.copytree(decomp / "licenses", notices / "decomp")
         runtimes.copy_notices(notices / "runtime")

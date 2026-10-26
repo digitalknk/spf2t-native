@@ -44,6 +44,12 @@ checksums, and verifies the compiler/CMake/SDL environment before compiling.
 See the [decomp project](https://github.com/gemmy-turbo/spf2t-decomp) for the
 output format documentation.
 
+On macOS the same command works with Xcode's command line tools instead of
+patchelf/ldd/GNU runtimes: `xcode-select --install`, then `brew install cmake sdl3`.
+Only SDL3 is bundled; libc++ and
+CoreAudio come from macOS. The package is ad-hoc signed, which is enough to run
+it on the Mac that built it.
+
 ## Repository defaults
 
 With the complete decomp handoff in this repository's `output/decomp/`:
@@ -71,7 +77,7 @@ are bundled; a compatible Linux loader/glibc
 and OS graphics drivers plus a working audio service or accessible sound device
 are still required. NixOS needs ELF loader support or a native toolchain build. The output directory
 contains the executable and its supporting files. See CONTAINERS.md for the
-Linux runtime baseline.
+Linux runtime baseline. On macOS, `lib/` holds only SDL3.
 
 To check audio independently of the game window, run:
 
@@ -101,7 +107,7 @@ THIRD_PARTY_NOTICES.md, UPSTREAM.md and [LICENSE_SCOPE.md](LICENSE_SCOPE.md).
 The source license grants no rights over original game content. The project
 is unofficial and is not affiliated with or endorsed by Capcom. Do not commit
 ROMs, imported/generated game data or derived game builds to public source.
-Required upstream notices remain. Windows/macOS have not been validated.
+Required upstream notices remain. macOS builds and packages natively; Windows has not been validated.
 
 AI tools were used extensively in reverse engineering, implementation, testing
 and documentation. Source recovery remains incomplete; passing bounded checks
